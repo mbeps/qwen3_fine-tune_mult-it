@@ -1,0 +1,3 @@
+myenv
+.env
+qwen3_benchmark/__pycache__/
