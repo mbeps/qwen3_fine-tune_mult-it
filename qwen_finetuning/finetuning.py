@@ -364,6 +364,8 @@ class QwenFineTuning:
             torch_dtype=torch.bfloat16,
             trust_remote_code=True,
             token=self.hf_token,
+            attn_implementation="flash_attention_2",  # ← ADD THIS LINE
+            use_cache=False,  # ← ADD THIS LINE
         )
 
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -374,19 +376,10 @@ class QwenFineTuning:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.padding_side = "right"
 
-        # LoRA configuration
         lora_config = LoraConfig(
             r=self.config.lora_r,
             lora_alpha=self.config.lora_alpha,
-            target_modules=[
-                "q_proj",
-                "k_proj",
-                "v_proj",
-                "o_proj",
-                "gate_proj",
-                "up_proj",
-                "down_proj",
-            ],
+            target_modules="all-linear",
             lora_dropout=self.config.lora_dropout,
             bias="none",
             task_type="CAUSAL_LM",
@@ -396,6 +389,7 @@ class QwenFineTuning:
 
         print("Trainable parameters:")
         self.model.print_trainable_parameters()
+        print(f"✓ Using target_modules='all-linear' for optimal performance")
 
     def setup_trainer(self, train_data: list):
         """
@@ -439,7 +433,6 @@ class QwenFineTuning:
             learning_rate=self.config.learning_rate,
             max_grad_norm=self.config.max_grad_norm,  # NEW: Gradient clipping
             weight_decay=0.01,
-            warmup_ratio=0.1,
             logging_steps=20,
             save_strategy="epoch",
             seed=42,
@@ -453,6 +446,9 @@ class QwenFineTuning:
             dataloader_persistent_workers=self.config.dataloader_persistent_workers,
             # Memory management optimization
             torch_empty_cache_steps=self.config.torch_empty_cache_steps,
+            lr_scheduler_type="cosine_with_restarts",  # Better than linear
+            warmup_ratio=0.03,
+            num_cycles=2,
         )
 
         self.trainer = SFTTrainer(
