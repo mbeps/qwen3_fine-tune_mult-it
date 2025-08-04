@@ -1,6 +1,6 @@
 class QwenFineTuningConfig:
     """
-    Configuration class for Qwen fine-tuning experiments.
+    Configuration class for Qwen fine-tuning experiments with gradient clipping support.
 
     Args:
         model_name (str): Model name or path.
@@ -9,6 +9,7 @@ class QwenFineTuningConfig:
         batch_size (int): Training batch size.
         gradient_accumulation_steps (int): Gradient accumulation steps.
         learning_rate (float): Learning rate.
+        max_grad_norm (float): Maximum gradient norm for clipping.
         num_epochs (int): Number of training epochs.
         max_length (int): Max sequence length.
         lora_r (int): LoRA rank.
@@ -29,7 +30,8 @@ class QwenFineTuningConfig:
         output_dir: str = "./results_clean",
         batch_size: int = 4,
         gradient_accumulation_steps: int = 4,
-        learning_rate: float = 5e-5,
+        learning_rate: float = 1e-4,  # Increased from 5e-5 for better LoRA performance
+        max_grad_norm: float = 1.0,  # NEW: Gradient clipping for stability
         num_epochs: int = 3,
         max_length: int = 512,
         lora_r: int = 16,
@@ -48,6 +50,7 @@ class QwenFineTuningConfig:
         self.batch_size = batch_size
         self.gradient_accumulation_steps = gradient_accumulation_steps
         self.learning_rate = learning_rate
+        self.max_grad_norm = max_grad_norm
         self.num_epochs = num_epochs
         self.max_length = max_length
         self.lora_r = lora_r
@@ -77,6 +80,7 @@ class QwenFineTuningConfig:
         print(f"✓ Configuration set")
         print(f"Model: {self.model_name}")
         print(f"Learning rate: {self.learning_rate}")
+        print(f"Max gradient norm: {self.max_grad_norm}")
         print(f"Batch size: {self.batch_size}")
         print(f"Effective batch size: {self.effective_batch_size}")
         print(f"Dataset processing cores: {self.dataset_num_proc}")
@@ -86,3 +90,4 @@ class QwenFineTuningConfig:
             f"DataLoader optimizations: pin_memory={self.dataloader_pin_memory}, persistent_workers={self.dataloader_persistent_workers}"
         )
         print(f"GPU cache management: empty every {self.torch_empty_cache_steps} steps")
+        print(f"Training stability: gradient clipping enabled at {self.max_grad_norm}")

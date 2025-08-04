@@ -73,7 +73,7 @@ def format_prompt_multiprocess(example, model_name: str):
 
 class QwenFineTuning:
     """
-    Main class for Qwen fine-tuning with LoRA.
+    Main class for Qwen fine-tuning with LoRA and gradient clipping.
 
     Args:
         config (QwenFineTuningConfig): Configuration object.
@@ -399,20 +399,22 @@ class QwenFineTuning:
 
     def setup_trainer(self, train_data: list):
         """
-        Set up trainer for fine-tuning with optimized DataLoader configuration.
+        Set up trainer for fine-tuning with optimized DataLoader configuration and gradient clipping.
 
         Args:
             train_data (list): List of training examples.
         """
-        print("Setting up trainer with optimized DataLoader configuration...")
+        print(
+            "Setting up trainer with optimized DataLoader configuration and gradient clipping..."
+        )
 
         # Use cached dataset preparation
         train_dataset = self.prepare_dataset_cached(train_data, self.config.train_file)
 
         # Report optimization settings
-        print(f"✓ DataLoader optimizations enabled:")
+        print(f"✓ Training optimizations enabled:")
         print(
-            f"  - Workers: {self.config.dataloader_num_workers} (parallel data loading)"
+            f"  - DataLoader workers: {self.config.dataloader_num_workers} (parallel data loading)"
         )
         print(
             f"  - Pin memory: {self.config.dataloader_pin_memory} (faster GPU transfer)"
@@ -423,6 +425,9 @@ class QwenFineTuning:
         print(
             f"  - GPU cache clearing: every {self.config.torch_empty_cache_steps} steps"
         )
+        print(
+            f"  - Gradient clipping: max_grad_norm={self.config.max_grad_norm} (training stability)"
+        )
 
         training_args = SFTConfig(
             output_dir=self.config.output_dir,
@@ -432,6 +437,7 @@ class QwenFineTuning:
             gradient_checkpointing=True,
             gradient_checkpointing_kwargs={"use_reentrant": False},
             learning_rate=self.config.learning_rate,
+            max_grad_norm=self.config.max_grad_norm,  # NEW: Gradient clipping
             weight_decay=0.01,
             warmup_ratio=0.1,
             logging_steps=20,
@@ -455,7 +461,7 @@ class QwenFineTuning:
             args=training_args,
         )
 
-        print(f"✓ Trainer configured with optimized settings for faster training")
+        print(f"✓ Trainer configured with gradient clipping for improved stability")
 
     def train(self):
         """
@@ -466,7 +472,7 @@ class QwenFineTuning:
         if self.trainer is None:
             raise ValueError("Trainer not set up. Call setup_trainer() first.")
 
-        print("Starting training...")
+        print("Starting training with gradient clipping enabled...")
         self.trainer.train()
 
     def save_model(self):
@@ -577,7 +583,7 @@ class QwenFineTuning:
 
     def run_complete_finetuning(self, train_data: list):
         """
-        Run complete fine-tuning pipeline with all optimizations.
+        Run complete fine-tuning pipeline with all optimizations including gradient clipping.
 
         Args:
             train_data (list): List of training examples.
@@ -607,6 +613,9 @@ class QwenFineTuning:
         )
         print(
             f"  - GPU memory management: cache clearing every {self.config.torch_empty_cache_steps} steps"
+        )
+        print(
+            f"  - Gradient clipping: max_grad_norm={self.config.max_grad_norm} for training stability"
         )
 
         self.setup_trainer(train_data)
