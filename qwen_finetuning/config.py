@@ -1,5 +1,26 @@
 class QwenFineTuningConfig:
-    """Configuration class for Qwen fine-tuning experiments."""
+    """
+    Configuration class for Qwen fine-tuning experiments.
+
+    Args:
+        model_name (str): Model name or path.
+        train_file (str): Path to training data file.
+        output_dir (str): Output directory for results.
+        batch_size (int): Training batch size.
+        gradient_accumulation_steps (int): Gradient accumulation steps.
+        learning_rate (float): Learning rate.
+        num_epochs (int): Number of training epochs.
+        max_length (int): Max sequence length.
+        lora_r (int): LoRA rank.
+        lora_alpha (int): LoRA alpha.
+        lora_dropout (float): LoRA dropout.
+        dataset_num_proc (int): Number of processes for dataset formatting.
+        cache_writer_batch_size (int): Batch size for cache writing.
+        dataloader_num_workers (int): DataLoader worker count.
+        dataloader_pin_memory (bool): Pin memory for DataLoader.
+        dataloader_persistent_workers (bool): Persistent workers for DataLoader.
+        torch_empty_cache_steps (int): Steps between GPU cache clearing.
+    """
 
     def __init__(
         self,
@@ -41,11 +62,18 @@ class QwenFineTuningConfig:
 
     @property
     def effective_batch_size(self) -> int:
-        """Calculate effective batch size."""
+        """
+        Calculate effective batch size.
+
+        Returns:
+            int: Effective batch size.
+        """
         return self.batch_size * self.gradient_accumulation_steps
 
     def print_config(self):
-        """Print current configuration."""
+        """
+        Print current configuration settings.
+        """
         print(f"✓ Configuration set")
         print(f"Model: {self.model_name}")
         print(f"Learning rate: {self.learning_rate}")

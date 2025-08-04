@@ -19,7 +19,14 @@ _tokenizer_cache = {}
 
 
 def _get_tokenizer(model_name: str):
-    """Get or create tokenizer for multiprocessing."""
+    """
+    Get or create a tokenizer for multiprocessing.
+
+    Args:
+        model_name (str): Model name or path.
+    Returns:
+        AutoTokenizer: Tokenizer instance.
+    """
     if model_name not in _tokenizer_cache:
         tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
         # Set padding token if needed
@@ -31,7 +38,15 @@ def _get_tokenizer(model_name: str):
 
 
 def format_prompt_multiprocess(example, model_name: str):
-    """Standalone function for multiprocessing dataset formatting."""
+    """
+    Format a single example for training using chat template (multiprocessing).
+
+    Args:
+        example (dict): Data example with 'question', 'options', 'answer'.
+        model_name (str): Model name or path.
+    Returns:
+        dict: Formatted text dict for dataset.
+    """
     tokenizer = _get_tokenizer(model_name)
 
     question = example["question"]
@@ -57,7 +72,12 @@ def format_prompt_multiprocess(example, model_name: str):
 
 
 class QwenFineTuning:
-    """Main class for Qwen fine-tuning with LoRA."""
+    """
+    Main class for Qwen fine-tuning with LoRA.
+
+    Args:
+        config (QwenFineTuningConfig): Configuration object.
+    """
 
     def __init__(self, config: QwenFineTuningConfig):
         self.config = config
@@ -67,7 +87,11 @@ class QwenFineTuning:
         self._setup_environment()
 
     def _setup_environment(self):
-        """Set up environment variables."""
+        """
+        Load environment variables and set Hugging Face token.
+        Raises:
+            ValueError: If HF_TOKEN is not found.
+        """
         load_dotenv()
         self.hf_token = os.getenv("HF_TOKEN")
 
@@ -78,7 +102,12 @@ class QwenFineTuning:
 
     @staticmethod
     def _get_memory_usage():
-        """Get current memory usage in GB."""
+        """
+        Get current memory usage in GB.
+
+        Returns:
+            float: Used memory in GB.
+        """
         try:
             memory_info = psutil.virtual_memory()
             return memory_info.used / (1024**3)  # Convert to GB
@@ -87,17 +116,40 @@ class QwenFineTuning:
 
     @staticmethod
     def _format_memory(gb):
-        """Format memory usage for display."""
+        """
+        Format memory usage for display.
+
+        Args:
+            gb (float): Memory in GB.
+        Returns:
+            str: Formatted string.
+        """
         return f"{gb:.1f}GB"
 
     @staticmethod
     def load_jsonl(file_path: str) -> list:
-        """Load data from JSONL file."""
+        """
+        Load data from a JSONL file.
+
+        Args:
+            file_path (str): Path to JSONL file.
+        Returns:
+            list: List of loaded examples.
+        """
         with open(file_path, "r", encoding="utf-8") as f:
             return [json.loads(line) for line in f]
 
     def format_prompt(self, question: str, options: list, answer: str = None) -> str:
-        """Format using Qwen3 chat template."""
+        """
+        Format prompt using Qwen3 chat template for training or inference.
+
+        Args:
+            question (str): Question text.
+            options (list): List of option dicts.
+            answer (str, optional): Answer text. If None, formats for inference.
+        Returns:
+            str: Formatted prompt string.
+        """
         options_text = "\n".join(
             [f"{list(opt.keys())[0]}) {list(opt.values())[0]}" for opt in options]
         )
@@ -127,7 +179,14 @@ class QwenFineTuning:
             )
 
     def _get_cache_path(self, data_file: str) -> str:
-        """Generate cache path for processed dataset."""
+        """
+        Generate cache path for processed dataset.
+
+        Args:
+            data_file (str): Path to source data file.
+        Returns:
+            str: Cache directory path.
+        """
         # Get source file info
         source_path = Path(data_file)
         if not source_path.exists():
@@ -150,7 +209,15 @@ class QwenFineTuning:
         return str(cache_dir)
 
     def _is_cache_valid(self, cache_path: str, source_file: str) -> bool:
-        """Check if cache is valid and up-to-date."""
+        """
+        Check if cache is valid and up-to-date.
+
+        Args:
+            cache_path (str): Path to cache directory.
+            source_file (str): Path to source file.
+        Returns:
+            bool: True if cache is valid, else False.
+        """
         cache_dir = Path(cache_path)
 
         # Check if cache directory exists
@@ -166,7 +233,15 @@ class QwenFineTuning:
         return True
 
     def prepare_dataset_cached(self, data: list, data_file: str) -> Dataset:
-        """Prepare dataset with memory-efficient caching optimization."""
+        """
+        Prepare dataset with memory-efficient caching optimization.
+
+        Args:
+            data (list): List of examples.
+            data_file (str): Path to source data file.
+        Returns:
+            Dataset: HuggingFace Dataset object.
+        """
         try:
             cache_path = self._get_cache_path(data_file)
 
@@ -220,7 +295,14 @@ class QwenFineTuning:
             return self.prepare_dataset(data)
 
     def prepare_dataset(self, data: list) -> Dataset:
-        """Prepare dataset for training with multiprocessing and memory optimization."""
+        """
+        Prepare dataset for training with multiprocessing and memory optimization.
+
+        Args:
+            data (list): List of examples.
+        Returns:
+            Dataset: Formatted HuggingFace Dataset.
+        """
         dataset = Dataset.from_list(data)
 
         memory_before = self._get_memory_usage()
@@ -247,7 +329,13 @@ class QwenFineTuning:
 
     @staticmethod
     def analyze_data(data: list, name: str):
-        """Analyse dataset distribution."""
+        """
+        Analyse dataset distribution by category and answer.
+
+        Args:
+            data (list): List of examples.
+            name (str): Dataset name for display.
+        """
         categories = {}
         answers = {}
 
@@ -264,7 +352,9 @@ class QwenFineTuning:
         )
 
     def setup_model(self):
-        """Set up model and tokeniser."""
+        """
+        Load model and tokenizer, set up LoRA configuration.
+        """
         print("Loading model and tokeniser...")
 
         # Load model with trust_remote_code for Qwen3
@@ -308,7 +398,12 @@ class QwenFineTuning:
         self.model.print_trainable_parameters()
 
     def setup_trainer(self, train_data: list):
-        """Set up trainer for fine-tuning with optimized training configuration."""
+        """
+        Set up trainer for fine-tuning with optimized DataLoader configuration.
+
+        Args:
+            train_data (list): List of training examples.
+        """
         print("Setting up trainer with optimized DataLoader configuration...")
 
         # Use cached dataset preparation
@@ -363,7 +458,11 @@ class QwenFineTuning:
         print(f"✓ Trainer configured with optimized settings for faster training")
 
     def train(self):
-        """Start training."""
+        """
+        Start training using the configured trainer.
+        Raises:
+            ValueError: If trainer is not set up.
+        """
         if self.trainer is None:
             raise ValueError("Trainer not set up. Call setup_trainer() first.")
 
@@ -371,7 +470,11 @@ class QwenFineTuning:
         self.trainer.train()
 
     def save_model(self):
-        """Save trained model."""
+        """
+        Save the trained model.
+        Raises:
+            ValueError: If trainer is not available.
+        """
         if self.trainer is None:
             raise ValueError("Trainer not available. Complete training first.")
 
@@ -381,20 +484,41 @@ class QwenFineTuning:
 
     @staticmethod
     def extract_answer(output: str) -> str:
-        """Extract answer from model output."""
+        """
+        Extract answer (A-E) from model output string.
+
+        Args:
+            output (str): Model output string.
+        Returns:
+            str: Extracted answer letter or empty string.
+        """
         if not output:
             return ""
         match = re.search(r"\b([ABCDE])\b", output.upper())
         return match.group(1) if match else ""
 
     def _format_options_text(self, options: list) -> str:
-        """Helper method for evaluation."""
+        """
+        Format options text for evaluation.
+
+        Args:
+            options (list): List of option dicts.
+        Returns:
+            str: Formatted options string.
+        """
         return "\n".join(
             [f"{list(opt.keys())[0]}) {list(opt.values())[0]}" for opt in options]
         )
 
     def evaluate_model(self, test_data: list) -> float:
-        """Evaluate model on test data."""
+        """
+        Evaluate model accuracy on test data.
+
+        Args:
+            test_data (list): List of test examples.
+        Returns:
+            float: Accuracy score.
+        """
         if self.model is None or self.tokenizer is None:
             raise ValueError("Model not set up. Call setup_model() first.")
 
@@ -452,7 +576,12 @@ class QwenFineTuning:
         return accuracy
 
     def run_complete_finetuning(self, train_data: list):
-        """Run complete fine-tuning pipeline with all optimizations."""
+        """
+        Run complete fine-tuning pipeline with all optimizations.
+
+        Args:
+            train_data (list): List of training examples.
+        """
         # Analyse data
         self.analyze_data(train_data, "Train")
 
