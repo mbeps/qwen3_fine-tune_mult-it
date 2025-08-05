@@ -73,7 +73,7 @@ def format_prompt_multiprocess(example, model_name: str):
 
 class QwenFineTuning:
     """
-    Main class for Qwen fine-tuning with LoRA and gradient clipping.
+    Main class for Qwen fine-tuning with LoRA optimizations.
 
     Args:
         config (QwenFineTuningConfig): Configuration object.
@@ -353,19 +353,17 @@ class QwenFineTuning:
 
     def setup_model(self):
         """
-        Load model and tokenizer, set up LoRA configuration.
+        Load model and tokenizer, set up optimized LoRA configuration.
         """
-        print("Loading model and tokeniser...")
+        print("Loading model and tokeniser with optimizations...")
 
-        # Load model with trust_remote_code for Qwen3
+        # Load model with standard configuration
         self.model = AutoModelForCausalLM.from_pretrained(
             self.config.model_name,
             device_map="auto",
             torch_dtype=torch.bfloat16,
             trust_remote_code=True,
             token=self.hf_token,
-            attn_implementation="flash_attention_2",  # ← ADD THIS LINE
-            use_cache=False,  # ← ADD THIS LINE
         )
 
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -376,37 +374,44 @@ class QwenFineTuning:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.padding_side = "right"
 
+        # OPTIMIZED LoRA configuration with RSLoRA and specific target modules
         lora_config = LoraConfig(
             r=self.config.lora_r,
             lora_alpha=self.config.lora_alpha,
-            target_modules="all-linear",
+            target_modules=self.config.target_modules,  # Specific modules list
             lora_dropout=self.config.lora_dropout,
             bias="none",
             task_type="CAUSAL_LM",
+            use_rslora=self.config.use_rslora,  # NEW: Rank-Stabilized LoRA
         )
 
         self.model = get_peft_model(self.model, lora_config)
 
-        print("Trainable parameters:")
+        print("✓ Optimized LoRA configuration applied:")
         self.model.print_trainable_parameters()
-        print(f"✓ Using target_modules='all-linear' for optimal performance")
+        print(f"  - RSLoRA enabled: {self.config.use_rslora}")
+        print(f"  - Target modules: {self.config.target_modules}")
 
     def setup_trainer(self, train_data: list):
         """
-        Set up trainer for fine-tuning with optimized DataLoader configuration and gradient clipping.
+        Set up trainer for fine-tuning with optimized configuration.
 
         Args:
             train_data (list): List of training examples.
         """
-        print(
-            "Setting up trainer with optimized DataLoader configuration and gradient clipping..."
-        )
+        print("Setting up trainer with optimized configuration...")
 
         # Use cached dataset preparation
         train_dataset = self.prepare_dataset_cached(train_data, self.config.train_file)
 
         # Report optimization settings
         print(f"✓ Training optimizations enabled:")
+        print(
+            f"  - Learning rate scheduler: {self.config.lr_scheduler_type}"
+        )
+        print(
+            f"  - Warmup ratio: {self.config.warmup_ratio}"
+        )
         print(
             f"  - DataLoader workers: {self.config.dataloader_num_workers} (parallel data loading)"
         )
@@ -419,10 +424,8 @@ class QwenFineTuning:
         print(
             f"  - GPU cache clearing: every {self.config.torch_empty_cache_steps} steps"
         )
-        print(
-            f"  - Gradient clipping: max_grad_norm={self.config.max_grad_norm} (training stability)"
-        )
 
+        # OPTIMIZED training arguments with cosine scheduling
         training_args = SFTConfig(
             output_dir=self.config.output_dir,
             num_train_epochs=self.config.num_epochs,
@@ -431,7 +434,12 @@ class QwenFineTuning:
             gradient_checkpointing=True,
             gradient_checkpointing_kwargs={"use_reentrant": False},
             learning_rate=self.config.learning_rate,
-            max_grad_norm=self.config.max_grad_norm,  # NEW: Gradient clipping
+            
+            # OPTIMIZED learning rate scheduling
+            lr_scheduler_type=self.config.lr_scheduler_type,  # NEW: cosine_with_restarts
+            warmup_ratio=self.config.warmup_ratio,  # NEW: optimal warmup
+            lr_scheduler_kwargs={"num_cycles": self.config.num_cycles} if "restarts" in self.config.lr_scheduler_type else {},
+            
             weight_decay=0.01,
             logging_steps=20,
             save_strategy="epoch",
@@ -446,9 +454,6 @@ class QwenFineTuning:
             dataloader_persistent_workers=self.config.dataloader_persistent_workers,
             # Memory management optimization
             torch_empty_cache_steps=self.config.torch_empty_cache_steps,
-            lr_scheduler_type="cosine_with_restarts",  # Better than linear
-            warmup_ratio=0.03,
-            num_cycles=2,
         )
 
         self.trainer = SFTTrainer(
@@ -457,7 +462,7 @@ class QwenFineTuning:
             args=training_args,
         )
 
-        print(f"✓ Trainer configured with gradient clipping for improved stability")
+        print(f"✓ Trainer configured with optimizations")
 
     def train(self):
         """
@@ -468,7 +473,7 @@ class QwenFineTuning:
         if self.trainer is None:
             raise ValueError("Trainer not set up. Call setup_trainer() first.")
 
-        print("Starting training with gradient clipping enabled...")
+        print("Starting optimized training...")
         self.trainer.train()
 
     def save_model(self):
@@ -482,7 +487,7 @@ class QwenFineTuning:
 
         print("Saving model...")
         self.trainer.save_model()
-        print("✓ Training completed")
+        print("✓ Optimized training completed")
 
     @staticmethod
     def extract_answer(output: str) -> str:
@@ -579,7 +584,7 @@ class QwenFineTuning:
 
     def run_complete_finetuning(self, train_data: list):
         """
-        Run complete fine-tuning pipeline with all optimizations including gradient clipping.
+        Run complete fine-tuning pipeline with optimizations.
 
         Args:
             train_data (list): List of training examples.
@@ -600,6 +605,10 @@ class QwenFineTuning:
         print(example[:150] + "...")
 
         print(f"\nOptimizations enabled:")
+        print(f"  - RSLoRA: {self.config.use_rslora}")
+        print(f"  - Target modules: {self.config.target_modules}")
+        print(f"  - LR scheduler: {self.config.lr_scheduler_type}")
+        print(f"  - Warmup ratio: {self.config.warmup_ratio}")
         print(f"  - Dataset processing: {self.config.dataset_num_proc} CPU cores")
         print(
             f"  - Memory-efficient caching: batch size {self.config.cache_writer_batch_size}"
@@ -609,9 +618,6 @@ class QwenFineTuning:
         )
         print(
             f"  - GPU memory management: cache clearing every {self.config.torch_empty_cache_steps} steps"
-        )
-        print(
-            f"  - Gradient clipping: max_grad_norm={self.config.max_grad_norm} for training stability"
         )
 
         self.setup_trainer(train_data)
