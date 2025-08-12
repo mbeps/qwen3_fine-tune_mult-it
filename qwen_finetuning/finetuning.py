@@ -8,12 +8,12 @@ from peft import LoraConfig, get_peft_model
 from trl import SFTConfig, SFTTrainer
 from tqdm import tqdm
 from dotenv import load_dotenv
-from .config import QwenFineTuningConfig
+from .config import QwenFineTuningConfig, ThinkingMode
 
 
 class QwenFineTuning:
     """
-    Simplified Qwen fine-tuning class.
+    Simplified Qwen fine-tuning class with mixed thinking/non-thinking support.
     Removes all unnecessary complexity and focuses on what works.
     """
 
@@ -38,13 +38,14 @@ class QwenFineTuning:
         with open(file_path, "r", encoding="utf-8") as f:
             return [json.loads(line) for line in f]
 
-    def format_prompt(self, example: dict) -> dict:
+    def format_prompt(self, example: dict, force_thinking: bool = None) -> dict:
         """
         Format a single example using chat template.
         Supports both standard QA and Chain-of-Thought formats.
 
         Args:
             example: Dict with 'question', 'options', 'answer' and optionally 'thinking'
+            force_thinking: Override thinking mode for this specific example
         Returns:
             Dict with formatted 'text' field
         """
@@ -52,6 +53,19 @@ class QwenFineTuning:
         options = example["options"]
         answer = example["answer"]
         thinking = example.get("thinking", None)
+
+        # Determine if this example should use thinking
+        use_thinking = (
+            force_thinking
+            if force_thinking is not None
+            else (
+                self.config.thinking_mode == ThinkingMode.ENABLED
+                or (
+                    self.config.thinking_mode == ThinkingMode.MIXED
+                    and thinking is not None
+                )
+            )
+        )
 
         # Format options
         options_text = "\n".join(
@@ -62,7 +76,7 @@ class QwenFineTuning:
         user_content = f"Domanda: {question}\n\n{options_text}"
 
         # Create assistant response based on thinking mode and data availability
-        if self.config.enable_thinking and thinking:
+        if use_thinking and thinking:
             # Thinking mode: include reasoning in <think> tags
             assistant_content = f"<think>\n{thinking}\n</think>\n\n{answer}"
         else:
@@ -80,7 +94,7 @@ class QwenFineTuning:
             messages,
             tokenize=False,
             add_generation_prompt=False,
-            enable_thinking=self.config.enable_thinking,
+            enable_thinking=use_thinking,
         )
 
         return {"text": text}
@@ -90,23 +104,34 @@ class QwenFineTuning:
         Prepare dataset for training.
         Simple, single-process approach that works.
         """
+
         formatted_data = []
         thinking_count = 0
+        mixed_thinking_count = 0
 
         for example in tqdm(data, desc="Formatting"):
             formatted = self.format_prompt(example)
             formatted_data.append(formatted)
 
-            # Count examples with thinking content
+            # Count examples with thinking content in original data
             if example.get("thinking"):
                 thinking_count += 1
+                # In mixed mode, check if this example actually used thinking
+                if self.config.thinking_mode == ThinkingMode.MIXED:
+                    if "<think>" in formatted["text"]:
+                        mixed_thinking_count += 1
 
         # Print dataset statistics
         print(f"Dataset prepared: {len(formatted_data)} examples")
-        if self.config.enable_thinking:
+        if self.config.thinking_mode == ThinkingMode.ENABLED:
+            print(f"All examples using thinking mode")
+        elif self.config.thinking_mode == ThinkingMode.MIXED:
             print(
-                f"Examples with thinking content: {thinking_count}/{len(formatted_data)}"
+                f"Mixed training: {mixed_thinking_count} thinking, {len(formatted_data) - mixed_thinking_count} non-thinking"
             )
+            print(f"Original data had {thinking_count} examples with thinking content")
+        else:
+            print(f"All examples using non-thinking mode")
 
         dataset = Dataset.from_list(formatted_data)
         return dataset
@@ -132,7 +157,9 @@ class QwenFineTuning:
             f"Answer distribution: {', '.join(f'{k}:{v}' for k, v in sorted(answers.items()))}"
         )
         if thinking_examples > 0:
-            print(f"Examples with thinking: {thinking_examples}")
+            print(
+                f"Examples with thinking: {thinking_examples} ({thinking_examples / len(data) * 100:.1f}%)"
+            )
 
     def setup_model(self):
         """
@@ -174,13 +201,12 @@ class QwenFineTuning:
 
     def setup_trainer(self, train_data: list):
         """
-        Set up trainer with proven configuration.
-        Simple, effective settings without overengineering.
+        Set up trainer with optimized configuration for thinking mode.
         """
         # Prepare dataset
         train_dataset = self.prepare_dataset(train_data)
 
-        # Training arguments - optimised for RTX 6000
+        # Training arguments - optimized based on thinking mode
         training_args = SFTConfig(
             output_dir=self.config.output_dir,
             num_train_epochs=self.config.num_epochs,
@@ -197,7 +223,7 @@ class QwenFineTuning:
             logging_steps=50,
             save_strategy="epoch",
             seed=42,
-            bf16=True,  # Use bf16 for RTX 6000
+            bf16=True,
             max_length=self.config.max_length,
             packing=True,  # Keep packing for efficiency
             dataset_text_field="text",
@@ -215,16 +241,15 @@ class QwenFineTuning:
         print(
             f"✓ Trainer ready ({len(train_dataset)} samples, {len(train_dataset) // self.config.effective_batch_size * self.config.num_epochs} steps)"
         )
-        print(
-            f"✓ Thinking mode: {'Enabled' if self.config.enable_thinking else 'Disabled'}"
-        )
+        print(f"✓ Thinking mode: {self.config.thinking_mode.value}")
+        print(f"✓ Effective batch size: {self.config.effective_batch_size}")
 
     def train(self):
         """Start training."""
         if self.trainer is None:
             raise ValueError("Trainer not set up. Call setup_trainer() first.")
 
-        print("\nStarting training...")
+        print(f"\nStarting training with {self.config.thinking_mode.value} mode...")
         self.trainer.train()
         print("✓ Training completed")
 
@@ -265,7 +290,7 @@ class QwenFineTuning:
         self.model.eval()
 
         # Set generation parameters based on thinking mode (Qwen3 recommendations)
-        if self.config.enable_thinking:
+        if self.config.thinking_mode in [ThinkingMode.ENABLED, ThinkingMode.MIXED]:
             gen_params = {
                 "max_new_tokens": 2048,  # More tokens for thinking
                 "do_sample": True,
@@ -273,6 +298,7 @@ class QwenFineTuning:
                 "top_p": 0.95,  # Qwen3 recommended for thinking
                 "top_k": 20,
             }
+            enable_thinking = True
         else:
             gen_params = {
                 "max_new_tokens": 256,  # Fewer tokens for direct answers
@@ -281,6 +307,7 @@ class QwenFineTuning:
                 "top_p": 0.8,  # Qwen3 recommended for non-thinking
                 "top_k": 20,
             }
+            enable_thinking = False
 
         for example in tqdm(test_data, desc="Evaluating"):
             # Format prompt for inference
@@ -298,11 +325,15 @@ class QwenFineTuning:
                 }
             ]
 
+            # For mixed mode, we'll use thinking if the example has thinking content
+            if self.config.thinking_mode == ThinkingMode.MIXED:
+                enable_thinking = bool(example.get("thinking"))
+
             prompt = self.tokenizer.apply_chat_template(
                 messages,
                 tokenize=False,
                 add_generation_prompt=True,
-                enable_thinking=self.config.enable_thinking,
+                enable_thinking=enable_thinking,
             )
 
             # Tokenize

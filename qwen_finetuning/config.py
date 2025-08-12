@@ -1,3 +1,14 @@
+from enum import Enum
+
+
+class ThinkingMode(Enum):
+    """Enumeration for thinking mode options."""
+
+    DISABLED = "disabled"  # No thinking tokens (default, backwards compatible)
+    ENABLED = "enabled"  # All examples use thinking tokens
+    MIXED = "mixed"  # Mix of thinking and non-thinking examples
+
+
 class QwenFineTuningConfig:
     """
     Configuration for Qwen fine-tuning.
@@ -22,14 +33,12 @@ class QwenFineTuningConfig:
         target_modules: list | None = None,
         dataloader_num_workers: int = 4,
         gradient_checkpointing: bool = False,
-        enable_thinking: bool = False,  # Enable Chain-of-Thought training
+        thinking_mode: ThinkingMode = ThinkingMode.DISABLED,  # Backwards compatible default
     ) -> None:
         self.model_name: str = model_name
         self.train_file: str = train_file
         self.output_dir: str = output_dir
-        self.batch_size: int = batch_size
         self.gradient_accumulation_steps: int = gradient_accumulation_steps
-        self.learning_rate: float = learning_rate
         self.warmup_ratio: float = warmup_ratio
         self.lr_scheduler_type: str = lr_scheduler_type
         self.num_epochs: int = num_epochs
@@ -38,12 +47,26 @@ class QwenFineTuningConfig:
         self.lora_dropout: float = lora_dropout
         self.dataloader_num_workers: int = dataloader_num_workers
         self.gradient_checkpointing: bool = gradient_checkpointing
-        self.enable_thinking: bool = enable_thinking
+        self.thinking_mode: ThinkingMode = thinking_mode
 
-        # Adjust max_length for thinking mode - Qwen3 recommends longer sequences for reasoning
-        if enable_thinking and max_length == 512:  # Only auto-adjust if using default
-            self.max_length: int = 2048
+        # Adjust hyperparameters based on thinking mode
+        if thinking_mode in [ThinkingMode.ENABLED, ThinkingMode.MIXED]:
+            # Qwen3 recommendations for thinking mode training
+            self.batch_size: int = max(
+                1, batch_size // 2
+            )  # Reduce batch size for longer sequences
+            self.learning_rate: float = (
+                learning_rate * 0.8
+            )  # Slightly lower LR for stability
+            # Auto-adjust max_length for thinking mode if using default
+            if max_length == 512:
+                self.max_length: int = 2048  # Qwen3 recommended for thinking
+            else:
+                self.max_length: int = max_length
         else:
+            # Standard settings for non-thinking mode
+            self.batch_size: int = batch_size
+            self.learning_rate: float = learning_rate
             self.max_length: int = max_length
 
         # Standard target modules for Qwen/Llama architecture
@@ -65,6 +88,11 @@ class QwenFineTuningConfig:
         """Calculate effective batch size."""
         return self.batch_size * self.gradient_accumulation_steps
 
+    @property
+    def enable_thinking(self) -> bool:
+        """Backwards compatibility property."""
+        return self.thinking_mode != ThinkingMode.DISABLED
+
     def print_config(self) -> None:
         """Print configuration summary."""
         print(f"Model: {self.model_name}")
@@ -73,5 +101,5 @@ class QwenFineTuningConfig:
         print(
             f"LoRA: r={self.lora_r}, alpha={self.lora_alpha}, dropout={self.lora_dropout}"
         )
-        print(f"Thinking mode: {'Enabled' if self.enable_thinking else 'Disabled'}")
+        print(f"Thinking mode: {self.thinking_mode.value}")
         print(f"Max length: {self.max_length}")
