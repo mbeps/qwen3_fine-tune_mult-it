@@ -22,6 +22,7 @@ class QwenFineTuningConfig:
         target_modules: list | None = None,
         dataloader_num_workers: int = 4,
         gradient_checkpointing: bool = False,
+        enable_thinking: bool = False,  # Enable Chain-of-Thought training
     ) -> None:
         self.model_name: str = model_name
         self.train_file: str = train_file
@@ -32,12 +33,18 @@ class QwenFineTuningConfig:
         self.warmup_ratio: float = warmup_ratio
         self.lr_scheduler_type: str = lr_scheduler_type
         self.num_epochs: int = num_epochs
-        self.max_length: int = max_length
         self.lora_r: int = lora_r
         self.lora_alpha: int = lora_alpha
         self.lora_dropout: float = lora_dropout
         self.dataloader_num_workers: int = dataloader_num_workers
         self.gradient_checkpointing: bool = gradient_checkpointing
+        self.enable_thinking: bool = enable_thinking
+
+        # Adjust max_length for thinking mode - Qwen3 recommends longer sequences for reasoning
+        if enable_thinking and max_length == 512:  # Only auto-adjust if using default
+            self.max_length: int = 2048
+        else:
+            self.max_length: int = max_length
 
         # Standard target modules for Qwen/Llama architecture
         if target_modules is None:
@@ -66,3 +73,5 @@ class QwenFineTuningConfig:
         print(
             f"LoRA: r={self.lora_r}, alpha={self.lora_alpha}, dropout={self.lora_dropout}"
         )
+        print(f"Thinking mode: {'Enabled' if self.enable_thinking else 'Disabled'}")
+        print(f"Max length: {self.max_length}")
