@@ -11,11 +11,10 @@ from dotenv import load_dotenv
 from .config import QwenFineTuningConfig, ThinkingMode
 
 
-
 class QwenFineTuning:
     """
     QwenFineTuning provides an interface for fine-tuning Qwen models with support for mixed thinking/non-thinking training modes.
-    
+
     This class handles environment setup, data formatting, model and tokenizer loading, LoRA configuration, training, evaluation, and saving.
     It is designed to be minimal, robust, and compatible with Qwen3 recommendations for both standard and chain-of-thought (thinking) training.
     """
@@ -127,7 +126,6 @@ class QwenFineTuning:
                         mixed_thinking_count += 1
 
         print(f"Dataset prepared: {len(formatted_data)} examples")
-        if self.config.thinking_mode == ThinkingMode.ENABLED:
         if self.config.thinking_mode == ThinkingMode.ENABLED:
             print("All examples using thinking mode")
         elif self.config.thinking_mode == ThinkingMode.MIXED:
@@ -355,7 +353,9 @@ class QwenFineTuning:
             print(f"Failed extractions: {failed_extractions}")
         return accuracy
 
-    def run_complete_pipeline(self, train_data: list, test_data: list = None) -> float | None:
+    def run_complete_pipeline(
+        self, train_data: list, test_data: list = None
+    ) -> float | None:
         """
         Run the complete fine-tuning pipeline: analyze data, set up model and trainer, train, save, and optionally evaluate.
         Args:
