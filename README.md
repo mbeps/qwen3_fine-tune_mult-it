@@ -78,3 +78,5 @@ poetry install
 Poetry will use the project `pyproject.toml` to install all declared dependencies and create/update `poetry.lock`.
 
 
+# References
+- [Mult-IT: Multiple Choice Questions on Multiple Topics in Italian:A CALAMITA Challenge](https://aclanthology.org/2024.clicit-1.131.pdf)
