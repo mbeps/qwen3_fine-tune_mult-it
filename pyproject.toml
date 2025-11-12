@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "qwen3-fine-tune-mult-it"
+version = "0.1.0"
+description = "Fine-tuning Qwen3 with multi-IT support."
+authors = ["Maruf Bepary <bepary71@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = ">=3.8,<4.0"
+torch = {version = "*", source = "pytorch"}
+torchvision = {version = "*", source = "pytorch"}
+torchaudio = {version = "*", source = "pytorch"}
+numpy = "*"
+transformers = "*"
+peft = "*"
+accelerate = "*"
+scikit-learn = "*"
+python-dotenv = "*"
+jupyter = "*"
+trl = "*"
+tqdm = "*"
+datasets = "*"
+pandas = "*"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
